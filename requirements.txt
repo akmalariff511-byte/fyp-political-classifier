@@ -1,5 +1,2 @@
 flask
 gunicorn
-torch
-transformers
-sentencepiece
