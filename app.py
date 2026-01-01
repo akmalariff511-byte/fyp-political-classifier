@@ -28,7 +28,8 @@ def predict():
     hate_conf = round(random.uniform(0.70, 0.95), 3) if hate == "hate" else round(random.uniform(0.60, 0.90), 3)
 
     # emotion (8 class)
-    emotions = ["anger", "anticipation", "disgust", "fear", "joy", "sadness", "surprise", "trust"]
+    emotions = ["anger", "anticipation", "disgust", "fear", "happy
+    ", "sadness", "surprise", "trust"]
     # simple cue
     if "!" in text:
         emotion = "surprise"
