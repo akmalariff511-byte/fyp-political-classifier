@@ -1,10 +1,52 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8" />
   <title>FYP Political Classifier</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    textarea { width: 100%; max-width: 900px; height: 140px; font-size: 16px; }
+    button { margin-top: 10px; padding: 10px 16px; font-size: 16px; cursor: pointer; }
+    pre { background: #f6f6f6; padding: 12px; border-radius: 8px; overflow-x: auto; }
+    .row { max-width: 900px; }
+  </style>
 </head>
 <body>
-  <h2>Website is running ✅</h2>
-  <p>This is the Flask web interface.</p>
+  <h1>Website is running ✅</h1>
+  <p>Test ayat di bawah (akan hantar ke <code>/predict</code>).</p>
+
+  <div class="row">
+    <textarea id="text" placeholder="Paste / taip ayat di sini..."></textarea>
+    <br />
+    <button onclick="send()">Predict</button>
+
+    <h3>Response</h3>
+    <pre id="out">{}</pre>
+  </div>
+
+  <script>
+    async function send() {
+      const text = document.getElementById("text").value.trim();
+      if (!text) {
+        alert("Sila isi ayat dulu.");
+        return;
+      }
+
+      document.getElementById("out").textContent = "Loading...";
+
+      try {
+        const res = await fetch("/predict", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ text })
+        });
+
+        const data = await res.json();
+        document.getElementById("out").textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        document.getElementById("out").textContent = "Error: " + e;
+      }
+    }
+  </script>
 </body>
 </html>
