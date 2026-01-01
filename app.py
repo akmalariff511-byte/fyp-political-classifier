@@ -1,53 +1,53 @@
 import os
-import random
+import requests
 from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
+
+# Cloudflare model server base URL (set in Render Environment Variables)
+MODEL_SERVER_URL = os.getenv("MODEL_SERVER_URL", "").rstrip("/")
+
 
 @app.route("/")
 def homepage():
     return render_template("index.html")
 
+
 @app.route("/health")
 def health():
-    return jsonify(status="ok")
+    return jsonify(status="ok", model_server=MODEL_SERVER_URL)
+
 
 @app.route("/predict", methods=["POST"])
 def predict():
     data = request.get_json(silent=True) or {}
     text = (data.get("text") or "").strip()
-    lower = text.lower()
 
-    political = 1 if any(k in lower for k in ["kerajaan", "parlimen", "undi", "menteri", "politik", "parti"]) else 0
-    political_conf = round(random.uniform(0.70, 0.95), 3)
+    # basic validation (optional but helpful)
+    if not text:
+        return jsonify({"error": "text is required"}), 400
 
-    if any(k in lower for k in ["kerajaan", "menteri", "pm"]):
-        target = "gov"
-    elif any(k in lower for k in ["parti", "penyokong"]):
-        target = "political_group"
-    elif any(k in lower for k in ["dia", "individu", "orang"]):
-        target = "person"
-    else:
-        target = "none"
-    target_conf = round(random.uniform(0.60, 0.93), 3)
+    if not MODEL_SERVER_URL:
+        return jsonify({"error": "MODEL_SERVER_URL not set in Render env"}), 500
 
-    hate = "hate" if any(k in lower for k in ["benci", "bodoh", "bangsat", "kepala butoh"]) else "none"
-    hate_conf = round(random.uniform(0.70, 0.95), 3)
+    try:
+        # Forward to model server
+        r = requests.post(
+            f"{MODEL_SERVER_URL}/predict",
+            json={"text": text},   # ensure format consistent
+            timeout=60
+        )
 
-    emotions = ["anger", "anticipation", "disgust", "fear", "joy", "sadness", "surprise", "trust"]
-    emotion = "anger" if hate == "hate" else random.choice(emotions)
-    emotion_conf = round(random.uniform(0.60, 0.90), 3)
+        # Return exactly what model server returns
+        return (r.text, r.status_code, {"Content-Type": "application/json"})
 
-    return jsonify({
-        "input": {"text": text},
-        "predictions": {
-            "political_topic": {"label": political, "confidence": political_conf},
-            "target": {"label": target, "confidence": target_conf},
-            "hate_speech": {"label": hate, "confidence": hate_conf},
-            "emotion": {"label": emotion, "confidence": emotion_conf}
-        }
-    })
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "Model server timeout (check Colab/tunnel)"}), 504
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5001))
+    # for local testing; Render uses its own server command
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
