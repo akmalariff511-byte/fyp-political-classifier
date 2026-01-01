@@ -16,7 +16,7 @@
   <h1>Website is running ✅</h1>
   <p>Test ayat di bawah (akan hantar ke <code>/predict</code>).</p>
 
-  <textarea id="textInput" rows="6" placeholder="Taip ayat di sini..."></textarea>
+  <textarea id="textInput" rows="6" placeholder="Taip ayat di sini...">anwar terbaik</textarea>
   <br><br>
   <button onclick="sendText()">Predict</button>
 
@@ -33,35 +33,113 @@
   <pre id="raw">{}</pre>
 
 <script>
-async function sendText() {
-  const text = document.getElementById("textInput").value;
+  // ✅ Model output mapping
+  const EMOTION_LABELS = [
+    "anger",
+    "anticipation",
+    "disgust",
+    "fear",
+    "joy",
+    "sadness",
+    "surprise",
+    "trust"
+  ];
 
-  const res = await fetch("/predict", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ text })
-  });
+  // ⚠️ Kalau label target dataset kau lain, tukar sini
+  const TARGET_LABELS = [
+    "individual",
+    "group",
+    "organization",
+    "other"
+  ];
 
-  const data = await res.json();
+  function pct(x) {
+    if (x === undefined || x === null || Number.isNaN(x)) return "-";
+    return (x * 100).toFixed(2) + "%";
+  }
 
-  // paparkan raw JSON
-  document.getElementById("raw").innerText = JSON.stringify(data, null, 2);
+  async function sendText() {
+    const text = document.getElementById("textInput").value;
 
-  // ambil output ikut format Step 1 (multi-task)
-  const pred = data.predictions || {};
+    // Reset display
+    document.getElementById("pLabel").innerText = "-";
+    document.getElementById("pConf").innerText  = "-";
+    document.getElementById("tLabel").innerText = "-";
+    document.getElementById("tConf").innerText  = "-";
+    document.getElementById("hLabel").innerText = "-";
+    document.getElementById("hConf").innerText  = "-";
+    document.getElementById("eLabel").innerText = "-";
+    document.getElementById("eConf").innerText  = "-";
+    document.getElementById("raw").innerText    = "Loading...";
 
-  document.getElementById("pLabel").innerText = pred.political_topic?.label ?? "-";
-  document.getElementById("pConf").innerText  = pred.political_topic?.confidence ?? "-";
+    try {
+      const res = await fetch("/predict", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ text })
+      });
 
-  document.getElementById("tLabel").innerText = pred.target?.label ?? "-";
-  document.getElementById("tConf").innerText  = pred.target?.confidence ?? "-";
+      const data = await res.json().catch(() => ({}));
 
-  document.getElementById("hLabel").innerText = pred.hate_speech?.label ?? "-";
-  document.getElementById("hConf").innerText  = pred.hate_speech?.confidence ?? "-";
+      // Raw JSON
+      document.getElementById("raw").innerText = JSON.stringify(data, null, 2);
 
-  document.getElementById("eLabel").innerText = pred.emotion?.label ?? "-";
-  document.getElementById("eConf").innerText  = pred.emotion?.confidence ?? "-";
-}
+      // Handle backend error
+      if (data.error) {
+        document.getElementById("pLabel").innerText = "Error";
+        document.getElementById("tLabel").innerText = "Error";
+        document.getElementById("hLabel").innerText = "Error";
+        document.getElementById("eLabel").innerText = "Error";
+        return;
+      }
+
+      // ===== Political (binary prob) =====
+      const pProb = data?.political?.prob;
+      document.getElementById("pLabel").innerText =
+        (pProb >= 0.5) ? "Yes" : "No";
+      document.getElementById("pConf").innerText =
+        pct(pProb);
+
+      // ===== Hate (binary prob) =====
+      const hProb = data?.hate?.prob;
+      document.getElementById("hLabel").innerText =
+        (hProb >= 0.5) ? "Yes" : "No";
+      document.getElementById("hConf").innerText =
+        pct(hProb);
+
+      // ===== Target (4-class) =====
+      const tPred = data?.target?.pred;
+      const tLabel = (typeof tPred === "number" && TARGET_LABELS[tPred])
+        ? TARGET_LABELS[tPred]
+        : String(tPred ?? "-");
+      document.getElementById("tLabel").innerText = tLabel;
+
+      const tTopProb = (Array.isArray(data?.target?.probs) && typeof tPred === "number")
+        ? data.target.probs[tPred]
+        : null;
+      document.getElementById("tConf").innerText = pct(tTopProb);
+
+      // ===== Emotion (8-class) =====
+      const ePred = data?.emotion?.pred;
+      const eLabel = (typeof ePred === "number" && EMOTION_LABELS[ePred])
+        ? EMOTION_LABELS[ePred]
+        : String(ePred ?? "-");
+      document.getElementById("eLabel").innerText = eLabel;
+
+      const eTopProb = (Array.isArray(data?.emotion?.probs) && typeof ePred === "number")
+        ? data.emotion.probs[ePred]
+        : null;
+      document.getElementById("eConf").innerText = pct(eTopProb);
+
+    } catch (err) {
+      document.getElementById("raw").innerText =
+        JSON.stringify({ error: String(err) }, null, 2);
+      document.getElementById("pLabel").innerText = "Error";
+      document.getElementById("tLabel").innerText = "Error";
+      document.getElementById("hLabel").innerText = "Error";
+      document.getElementById("eLabel").innerText = "Error";
+    }
+  }
 </script>
 
 </body>
