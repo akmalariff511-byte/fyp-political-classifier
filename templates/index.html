@@ -9,137 +9,73 @@
     .row { margin: 8px 0; }
     .label { display:inline-block; width: 160px; font-weight: bold; }
     .badge { padding: 2px 8px; border-radius: 8px; background: #eaeaea; }
+    pre { background:#111; color:#eee; padding:12px; border-radius:10px; max-width:900px; }
   </style>
 </head>
 <body>
 
-  <h1>Website is running ✅</h1>
-  <p>Test ayat di bawah (akan hantar ke <code>/predict</code>).</p>
+<h1>Website is running ✅</h1>
+<p>Test ayat di bawah (akan hantar ke <code>/predict</code>).</p>
 
-  <textarea id="textInput" rows="6" placeholder="Taip ayat di sini...">anwar terbaik</textarea>
-  <br><br>
-  <button onclick="sendText()">Predict</button>
+<textarea id="textInput" rows="6">anwar terbaik</textarea>
+<br><br>
+<button onclick="sendText()">Predict</button>
 
-  <h2>Response</h2>
+<h2>Response</h2>
 
-  <div class="box">
-    <div class="row"><span class="label">Political Topic:</span> <span id="pLabel" class="badge">-</span> (<span id="pConf">-</span>)</div>
-    <div class="row"><span class="label">Target:</span> <span id="tLabel" class="badge">-</span> (<span id="tConf">-</span>)</div>
-    <div class="row"><span class="label">Hate Speech:</span> <span id="hLabel" class="badge">-</span> (<span id="hConf">-</span>)</div>
-    <div class="row"><span class="label">Emotion:</span> <span id="eLabel" class="badge">-</span> (<span id="eConf">-</span>)</div>
-  </div>
+<div class="box">
+  <div class="row"><span class="label">Political:</span> <span id="pLabel" class="badge">-</span> (<span id="pConf">-</span>)</div>
+  <div class="row"><span class="label">Target:</span> <span id="tLabel" class="badge">-</span> (<span id="tConf">-</span>)</div>
+  <div class="row"><span class="label">Hate:</span> <span id="hLabel" class="badge">-</span> (<span id="hConf">-</span>)</div>
+  <div class="row"><span class="label">Emotion:</span> <span id="eLabel" class="badge">-</span> (<span id="eConf">-</span>)</div>
+</div>
 
-  <h3>Raw JSON</h3>
-  <pre id="raw">{}</pre>
+<h3>Raw JSON</h3>
+<pre id="raw">{}</pre>
 
 <script>
-  // ✅ Model output mapping
-  const EMOTION_LABELS = [
-    "anger",
-    "anticipation",
-    "disgust",
-    "fear",
-    "joy",
-    "sadness",
-    "surprise",
-    "trust"
-  ];
+const EMOTION_LABELS = [
+  "anger","anticipation","disgust","fear",
+  "happy","sadness","surprise","trust"
+];
 
-  // ⚠️ Kalau label target dataset kau lain, tukar sini
-  const TARGET_LABELS = [
-    "individual",
-    "group",
-    "organization",
-    "other"
-  ];
+const TARGET_LABELS = [
+  "gov","none","person","political group"
+];
 
-  function pct(x) {
-    if (x === undefined || x === null || Number.isNaN(x)) return "-";
-    return (x * 100).toFixed(2) + "%";
-  }
+function pct(x) {
+  if (x === undefined || x === null) return "-";
+  return (x * 100).toFixed(2) + "%";
+}
 
-  async function sendText() {
-    const text = document.getElementById("textInput").value;
+async function sendText() {
+  const text = document.getElementById("textInput").value;
 
-    // Reset display
-    document.getElementById("pLabel").innerText = "-";
-    document.getElementById("pConf").innerText  = "-";
-    document.getElementById("tLabel").innerText = "-";
-    document.getElementById("tConf").innerText  = "-";
-    document.getElementById("hLabel").innerText = "-";
-    document.getElementById("hConf").innerText  = "-";
-    document.getElementById("eLabel").innerText = "-";
-    document.getElementById("eConf").innerText  = "-";
-    document.getElementById("raw").innerText    = "Loading...";
+  const res = await fetch("/predict", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ text })
+  });
 
-    try {
-      const res = await fetch("/predict", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ text })
-      });
+  const data = await res.json();
+  document.getElementById("raw").innerText = JSON.stringify(data, null, 2);
 
-      const data = await res.json().catch(() => ({}));
+  document.getElementById("pLabel").innerText =
+    data.political?.prob >= 0.5 ? "political" : "non-political";
+  document.getElementById("pConf").innerText = pct(data.political?.prob);
 
-      // Raw JSON
-      document.getElementById("raw").innerText = JSON.stringify(data, null, 2);
+  document.getElementById("hLabel").innerText =
+    data.hate?.prob >= 0.5 ? "hate" : "none";
+  document.getElementById("hConf").innerText = pct(data.hate?.prob);
 
-      // Handle backend error
-      if (data.error) {
-        document.getElementById("pLabel").innerText = "Error";
-        document.getElementById("tLabel").innerText = "Error";
-        document.getElementById("hLabel").innerText = "Error";
-        document.getElementById("eLabel").innerText = "Error";
-        return;
-      }
+  const t = data.target?.pred;
+  document.getElementById("tLabel").innerText = TARGET_LABELS[t];
+  document.getElementById("tConf").innerText = pct(data.target?.probs?.[t]);
 
-      // ===== Political (binary prob) =====
-      const pProb = data?.political?.prob;
-      document.getElementById("pLabel").innerText =
-        (pProb >= 0.5) ? "Yes" : "No";
-      document.getElementById("pConf").innerText =
-        pct(pProb);
-
-      // ===== Hate (binary prob) =====
-      const hProb = data?.hate?.prob;
-      document.getElementById("hLabel").innerText =
-        (hProb >= 0.5) ? "Yes" : "No";
-      document.getElementById("hConf").innerText =
-        pct(hProb);
-
-      // ===== Target (4-class) =====
-      const tPred = data?.target?.pred;
-      const tLabel = (typeof tPred === "number" && TARGET_LABELS[tPred])
-        ? TARGET_LABELS[tPred]
-        : String(tPred ?? "-");
-      document.getElementById("tLabel").innerText = tLabel;
-
-      const tTopProb = (Array.isArray(data?.target?.probs) && typeof tPred === "number")
-        ? data.target.probs[tPred]
-        : null;
-      document.getElementById("tConf").innerText = pct(tTopProb);
-
-      // ===== Emotion (8-class) =====
-      const ePred = data?.emotion?.pred;
-      const eLabel = (typeof ePred === "number" && EMOTION_LABELS[ePred])
-        ? EMOTION_LABELS[ePred]
-        : String(ePred ?? "-");
-      document.getElementById("eLabel").innerText = eLabel;
-
-      const eTopProb = (Array.isArray(data?.emotion?.probs) && typeof ePred === "number")
-        ? data.emotion.probs[ePred]
-        : null;
-      document.getElementById("eConf").innerText = pct(eTopProb);
-
-    } catch (err) {
-      document.getElementById("raw").innerText =
-        JSON.stringify({ error: String(err) }, null, 2);
-      document.getElementById("pLabel").innerText = "Error";
-      document.getElementById("tLabel").innerText = "Error";
-      document.getElementById("hLabel").innerText = "Error";
-      document.getElementById("eLabel").innerText = "Error";
-    }
-  }
+  const e = data.emotion?.pred;
+  document.getElementById("eLabel").innerText = EMOTION_LABELS[e];
+  document.getElementById("eConf").innerText = pct(data.emotion?.probs?.[e]);
+}
 </script>
 
 </body>
