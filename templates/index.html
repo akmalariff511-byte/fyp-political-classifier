@@ -17,7 +17,7 @@
 *{box-sizing:border-box}
 body{
   margin:0;
-  font-family: "Inter", system-ui, sans-serif;
+  font-family:"Inter",system-ui,sans-serif;
   background:linear-gradient(135deg,#0f1220,#11142a);
   color:var(--text);
 }
@@ -28,14 +28,8 @@ body{
   padding:20px;
 }
 
-h1{
-  font-size:2.2rem;
-  margin-bottom:8px;
-}
-.sub{
-  color:var(--muted);
-  margin-bottom:30px;
-}
+h1{font-size:2.2rem;margin-bottom:8px}
+.sub{color:var(--muted);margin-bottom:30px}
 
 textarea{
   width:100%;
@@ -97,7 +91,6 @@ button:hover{transform:scale(1.05)}
 
 .green{background:#1dd1a1;color:#000}
 .red{background:#ff6b6b;color:#000}
-.yellow{background:#feca57;color:#000}
 .blue{background:#54a0ff;color:#000}
 .gray{background:#576574;color:#fff}
 
@@ -150,7 +143,7 @@ function badgeClass(v){
 
 function toggleRaw(){
   const r=document.getElementById("raw");
-  r.style.display = r.style.display==="none"?"block":"none";
+  r.style.display = (r.style.display==="none"||r.style.display==="") ? "block" : "none";
 }
 
 async function predict(){
@@ -158,31 +151,49 @@ async function predict(){
   const container=document.querySelector(".container");
   container.classList.add("loading");
 
-  const res=await fetch("/predict",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({text})
-  });
+  let data = {};
+  try{
+    const res=await fetch("/predict",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({text})
+    });
 
-  const data=await res.json();
-  container.classList.remove("loading");
+    // safer parsing (avoid "Expecting value..." when backend returns non-JSON)
+    const rawText = await res.text();
+    try { data = JSON.parse(rawText); }
+    catch { data = { error: rawText || "Non-JSON response from server" }; }
+
+  }catch(err){
+    data = { error: String(err) };
+  }finally{
+    container.classList.remove("loading");
+  }
 
   document.getElementById("raw").innerText=JSON.stringify(data,null,2);
 
+  // Support BOTH formats:
+  // (A) simple: { politic:"political", target:"person", hate:"none", emotion:"happy" }
+  // (B) rich:   { politic:{label,score}, target:{label,id}, hate:{label,score}, emotion:{label,id} }
+  const politicVal = data.politic ?? data.political;   // just in case
+  const targetVal  = data.target;
+  const hateVal    = data.hate;
+  const emoVal     = data.emotion;
+
   const cards=[
-    ["Political",data.politic?.label,data.politic?.score],
-    ["Target",data.target?.label,null],
-    ["Hate",data.hate?.label,data.hate?.score],
-    ["Emotion",data.emotion?.label,null],
+    ["Political", politicVal?.label ?? politicVal ?? "-", politicVal?.score],
+    ["Target",   targetVal?.label  ?? targetVal  ?? "-", null],
+    ["Hate",     hateVal?.label    ?? hateVal    ?? "-", hateVal?.score],
+    ["Emotion",  emoVal?.label     ?? emoVal     ?? "-", null],
   ];
 
   document.getElementById("results").innerHTML = cards.map(
     ([t,v,s])=>`
     <div class="card">
       <h3>${t}</h3>
-      <div class="value">${v??"-"}</div>
+      <div class="value">${v ?? "-"}</div>
       <span class="badge ${badgeClass(v)}">
-        ${s!=null?(s*100).toFixed(2)+"%":"predicted"}
+        ${s!=null ? (s*100).toFixed(2)+"%" : "predicted"}
       </span>
     </div>`
   ).join("");
