@@ -39,13 +39,20 @@ const EMOTION_LABELS = [
   "happy","sadness","surprise","trust"
 ];
 
+// ✅ ikut mapping model training: 0..3
 const TARGET_LABELS = [
-  "gov","none","person","political group"
+  "no targeted","person","gov","political group"
 ];
 
 function pct(x) {
-  if (x === undefined || x === null) return "-";
+  if (x === undefined || x === null || Number.isNaN(x)) return "-";
   return (x * 100).toFixed(2) + "%";
+}
+
+// helper: safe label
+function safeText(x) {
+  if (x === undefined || x === null) return "undefined";
+  return String(x);
 }
 
 async function sendText() {
@@ -60,21 +67,64 @@ async function sendText() {
   const data = await res.json();
   document.getElementById("raw").innerText = JSON.stringify(data, null, 2);
 
-  document.getElementById("pLabel").innerText =
-    data.political?.prob >= 0.5 ? "political" : "non-political";
-  document.getElementById("pConf").innerText = pct(data.political?.prob);
+  // ----------------------------
+  // MODE 1 (preferred):
+  // expects:
+  // political.prob, hate.prob
+  // target.pred + target.probs[]
+  // emotion.pred + emotion.probs[]
+  // ----------------------------
+  const hasProbs =
+    (data?.political && typeof data.political.prob === "number") ||
+    (data?.target && typeof data.target.pred === "number") ||
+    (data?.emotion && typeof data.emotion.pred === "number");
 
-  document.getElementById("hLabel").innerText =
-    data.hate?.prob >= 0.5 ? "hate" : "none";
-  document.getElementById("hConf").innerText = pct(data.hate?.prob);
+  if (hasProbs) {
+    // political
+    const pProb = data.political?.prob;
+    document.getElementById("pLabel").innerText = (pProb >= 0.5) ? "political" : "non-political";
+    document.getElementById("pConf").innerText = pct(pProb);
 
-  const t = data.target?.pred;
-  document.getElementById("tLabel").innerText = TARGET_LABELS[t];
-  document.getElementById("tConf").innerText = pct(data.target?.probs?.[t]);
+    // hate
+    const hProb = data.hate?.prob;
+    document.getElementById("hLabel").innerText = (hProb >= 0.5) ? "hate" : "none";
+    document.getElementById("hConf").innerText = pct(hProb);
 
-  const e = data.emotion?.pred;
-  document.getElementById("eLabel").innerText = EMOTION_LABELS[e];
-  document.getElementById("eConf").innerText = pct(data.emotion?.probs?.[e]);
+    // target
+    const t = data.target?.pred;
+    document.getElementById("tLabel").innerText = (t !== undefined) ? TARGET_LABELS[t] : "undefined";
+    document.getElementById("tConf").innerText = pct(data.target?.probs?.[t]);
+
+    // emotion
+    const e = data.emotion?.pred;
+    document.getElementById("eLabel").innerText = (e !== undefined) ? EMOTION_LABELS[e] : "undefined";
+    document.getElementById("eConf").innerText = pct(data.emotion?.probs?.[e]);
+
+    return;
+  }
+
+  // ----------------------------
+  // MODE 2 (fallback):
+  // accepts simple strings:
+  // { politic:"political", target:"person", hate:"none", emotion:"happy" }
+  // OR { political:"political", target:"person", hate:"none", emotion:"happy" }
+  // ----------------------------
+  const polStr = data.politic ?? data.political;
+  const tgtStr = data.target;
+  const hateStr = data.hate;
+  const emoStr = data.emotion;
+
+  document.getElementById("pLabel").innerText = safeText(polStr);
+  document.getElementById("pConf").innerText = "-";
+
+  document.getElementById("tLabel").innerText = safeText(tgtStr);
+  document.getElementById("tConf").innerText = "-";
+
+  document.getElementById("hLabel").innerText = safeText(hateStr);
+  document.getElementById("hConf").innerText = "-";
+
+  document.getElementById("eLabel").innerText = safeText(emoStr);
+  document.getElementById("eConf").innerText = "-";
 }
 </script>
 
