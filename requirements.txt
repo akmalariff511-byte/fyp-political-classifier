@@ -1,6 +1,3 @@
 flask
 gunicorn
 requests
-torch
-transformers
-sentencepiece
