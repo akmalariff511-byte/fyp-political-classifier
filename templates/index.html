@@ -1,132 +1,192 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>FYP Political Classifier</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 30px; }
-    textarea { width: 100%; max-width: 900px; }
-    .box { background:#f5f5f5; padding:15px; border-radius:10px; max-width: 900px; }
-    .row { margin: 8px 0; }
-    .label { display:inline-block; width: 160px; font-weight: bold; }
-    .badge { padding: 2px 8px; border-radius: 8px; background: #eaeaea; }
-    pre { background:#111; color:#eee; padding:12px; border-radius:10px; max-width:900px; }
-  </style>
+<meta charset="UTF-8">
+<title>FYP Political Classifier</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+:root{
+  --bg:#0f1220;
+  --card:#171a2e;
+  --accent:#6cf2c2;
+  --text:#f5f6fa;
+  --muted:#a4a6c0;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family: "Inter", system-ui, sans-serif;
+  background:linear-gradient(135deg,#0f1220,#11142a);
+  color:var(--text);
+}
+
+.container{
+  max-width:1000px;
+  margin:40px auto;
+  padding:20px;
+}
+
+h1{
+  font-size:2.2rem;
+  margin-bottom:8px;
+}
+.sub{
+  color:var(--muted);
+  margin-bottom:30px;
+}
+
+textarea{
+  width:100%;
+  padding:14px;
+  background:#0c0f1e;
+  color:#fff;
+  border:1px solid #2a2e55;
+  border-radius:10px;
+  resize:vertical;
+  font-size:1rem;
+}
+
+button{
+  margin-top:14px;
+  padding:12px 26px;
+  background:var(--accent);
+  color:#000;
+  border:none;
+  border-radius:999px;
+  font-weight:700;
+  cursor:pointer;
+  transition:.2s;
+}
+button:hover{transform:scale(1.05)}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:16px;
+  margin-top:30px;
+}
+
+.card{
+  background:var(--card);
+  padding:18px;
+  border-radius:14px;
+  box-shadow:0 10px 30px rgba(0,0,0,.35);
+}
+
+.card h3{
+  margin:0 0 6px;
+  font-size:1rem;
+  color:var(--muted);
+}
+
+.value{
+  font-size:1.4rem;
+  font-weight:700;
+}
+
+.badge{
+  display:inline-block;
+  margin-top:6px;
+  padding:4px 10px;
+  border-radius:999px;
+  font-size:.75rem;
+  font-weight:600;
+}
+
+.green{background:#1dd1a1;color:#000}
+.red{background:#ff6b6b;color:#000}
+.yellow{background:#feca57;color:#000}
+.blue{background:#54a0ff;color:#000}
+.gray{background:#576574;color:#fff}
+
+pre{
+  margin-top:20px;
+  background:#0b0e1a;
+  padding:16px;
+  border-radius:12px;
+  overflow:auto;
+  font-size:.85rem;
+  display:none;
+}
+
+.toggle{
+  margin-top:16px;
+  color:var(--accent);
+  cursor:pointer;
+  font-weight:600;
+}
+
+.loading{
+  opacity:.5;
+  pointer-events:none;
+}
+</style>
 </head>
+
 <body>
+<div class="container">
+  <h1>Political Text Intelligence System</h1>
+  <div class="sub">Multitask XLM-R Model (Political • Target • Hate • Emotion)</div>
 
-<h1>Website is running ✅</h1>
-<p>Test ayat di bawah (akan hantar ke <code>/predict</code>).</p>
+  <textarea id="text" rows="5">anwar terbaik</textarea>
+  <br>
+  <button onclick="predict()">Analyze</button>
 
-<textarea id="textInput" rows="6">anwar terbaik</textarea>
-<br><br>
-<button onclick="sendText()">Predict</button>
+  <div id="results" class="grid"></div>
 
-<h2>Response</h2>
-
-<div class="box">
-  <div class="row"><span class="label">Political:</span> <span id="pLabel" class="badge">-</span> (<span id="pConf">-</span>)</div>
-  <div class="row"><span class="label">Target:</span> <span id="tLabel" class="badge">-</span> (<span id="tConf">-</span>)</div>
-  <div class="row"><span class="label">Hate:</span> <span id="hLabel" class="badge">-</span> (<span id="hConf">-</span>)</div>
-  <div class="row"><span class="label">Emotion:</span> <span id="eLabel" class="badge">-</span> (<span id="eConf">-</span>)</div>
+  <div class="toggle" onclick="toggleRaw()">Show Raw JSON</div>
+  <pre id="raw"></pre>
 </div>
 
-<h3>Raw JSON</h3>
-<pre id="raw">{}</pre>
-
 <script>
-const EMOTION_LABELS = [
-  "anger","anticipation","disgust","fear",
-  "happy","sadness","surprise","trust"
-];
-
-// ✅ ikut mapping model training: 0..3
-const TARGET_LABELS = [
-  "no targeted","person","gov","political group"
-];
-
-function pct(x) {
-  if (x === undefined || x === null || Number.isNaN(x)) return "-";
-  return (x * 100).toFixed(2) + "%";
+function badgeClass(v){
+  if(v==="political"||v==="hate") return "red";
+  if(v==="non-political"||v==="none") return "green";
+  if(v==="person"||v==="gov") return "blue";
+  return "gray";
 }
 
-// helper: safe label
-function safeText(x) {
-  if (x === undefined || x === null) return "undefined";
-  return String(x);
+function toggleRaw(){
+  const r=document.getElementById("raw");
+  r.style.display = r.style.display==="none"?"block":"none";
 }
 
-async function sendText() {
-  const text = document.getElementById("textInput").value;
+async function predict(){
+  const text=document.getElementById("text").value;
+  const container=document.querySelector(".container");
+  container.classList.add("loading");
 
-  const res = await fetch("/predict", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ text })
+  const res=await fetch("/predict",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({text})
   });
 
-  const data = await res.json();
-  document.getElementById("raw").innerText = JSON.stringify(data, null, 2);
+  const data=await res.json();
+  container.classList.remove("loading");
 
-  // ----------------------------
-  // MODE 1 (preferred):
-  // expects:
-  // political.prob, hate.prob
-  // target.pred + target.probs[]
-  // emotion.pred + emotion.probs[]
-  // ----------------------------
-  const hasProbs =
-    (data?.political && typeof data.political.prob === "number") ||
-    (data?.target && typeof data.target.pred === "number") ||
-    (data?.emotion && typeof data.emotion.pred === "number");
+  document.getElementById("raw").innerText=JSON.stringify(data,null,2);
 
-  if (hasProbs) {
-    // political
-    const pProb = data.political?.prob;
-    document.getElementById("pLabel").innerText = (pProb >= 0.5) ? "political" : "non-political";
-    document.getElementById("pConf").innerText = pct(pProb);
+  const cards=[
+    ["Political",data.politic?.label,data.politic?.score],
+    ["Target",data.target?.label,null],
+    ["Hate",data.hate?.label,data.hate?.score],
+    ["Emotion",data.emotion?.label,null],
+  ];
 
-    // hate
-    const hProb = data.hate?.prob;
-    document.getElementById("hLabel").innerText = (hProb >= 0.5) ? "hate" : "none";
-    document.getElementById("hConf").innerText = pct(hProb);
-
-    // target
-    const t = data.target?.pred;
-    document.getElementById("tLabel").innerText = (t !== undefined) ? TARGET_LABELS[t] : "undefined";
-    document.getElementById("tConf").innerText = pct(data.target?.probs?.[t]);
-
-    // emotion
-    const e = data.emotion?.pred;
-    document.getElementById("eLabel").innerText = (e !== undefined) ? EMOTION_LABELS[e] : "undefined";
-    document.getElementById("eConf").innerText = pct(data.emotion?.probs?.[e]);
-
-    return;
-  }
-
-  // ----------------------------
-  // MODE 2 (fallback):
-  // accepts simple strings:
-  // { politic:"political", target:"person", hate:"none", emotion:"happy" }
-  // OR { political:"political", target:"person", hate:"none", emotion:"happy" }
-  // ----------------------------
-  const polStr = data.politic ?? data.political;
-  const tgtStr = data.target;
-  const hateStr = data.hate;
-  const emoStr = data.emotion;
-
-  document.getElementById("pLabel").innerText = safeText(polStr);
-  document.getElementById("pConf").innerText = "-";
-
-  document.getElementById("tLabel").innerText = safeText(tgtStr);
-  document.getElementById("tConf").innerText = "-";
-
-  document.getElementById("hLabel").innerText = safeText(hateStr);
-  document.getElementById("hConf").innerText = "-";
-
-  document.getElementById("eLabel").innerText = safeText(emoStr);
-  document.getElementById("eConf").innerText = "-";
+  document.getElementById("results").innerHTML = cards.map(
+    ([t,v,s])=>`
+    <div class="card">
+      <h3>${t}</h3>
+      <div class="value">${v??"-"}</div>
+      <span class="badge ${badgeClass(v)}">
+        ${s!=null?(s*100).toFixed(2)+"%":"predicted"}
+      </span>
+    </div>`
+  ).join("");
 }
 </script>
-
 </body>
 </html>
