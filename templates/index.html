@@ -134,10 +134,18 @@ pre{
 </div>
 
 <script>
+// Label maps (ikut dataset kau)
+const TARGET_LABELS = ["no targeted", "person", "gov", "political group"];
+const EMO_LABELS = ["anger","anticipation","disgust","fear","happy","sadness","surprise","trust"];
+
+function pct(x){
+  return (x*100).toFixed(2) + "%";
+}
+
 function badgeClass(v){
   if(v==="political"||v==="hate") return "red";
-  if(v==="non-political"||v==="none") return "green";
-  if(v==="person"||v==="gov") return "blue";
+  if(v==="non-political"||v==="non-hate"||v==="none") return "green";
+  if(v==="person"||v==="gov"||v==="political group") return "blue";
   return "gray";
 }
 
@@ -159,7 +167,6 @@ async function predict(){
       body:JSON.stringify({text})
     });
 
-    // safer parsing (avoid "Expecting value..." when backend returns non-JSON)
     const rawText = await res.text();
     try { data = JSON.parse(rawText); }
     catch { data = { error: rawText || "Non-JSON response from server" }; }
@@ -170,30 +177,53 @@ async function predict(){
     container.classList.remove("loading");
   }
 
+  // show raw json
   document.getElementById("raw").innerText=JSON.stringify(data,null,2);
 
-  // Support BOTH formats:
-  // (A) simple: { politic:"political", target:"person", hate:"none", emotion:"happy" }
-  // (B) rich:   { politic:{label,score}, target:{label,id}, hate:{label,score}, emotion:{label,id} }
-  const politicVal = data.politic ?? data.political;   // just in case
-  const targetVal  = data.target;
-  const hateVal    = data.hate;
-  const emoVal     = data.emotion;
+  // if error
+  if(data && data.error){
+    document.getElementById("results").innerHTML = `
+      <div class="card" style="grid-column:1/-1">
+        <h3>Error</h3>
+        <div class="value">${String(data.error)}</div>
+        <span class="badge gray">check server / tunnel</span>
+      </div>`;
+    return;
+  }
 
-  const cards=[
-    ["Political", politicVal?.label ?? politicVal ?? "-", politicVal?.score],
-    ["Target",   targetVal?.label  ?? targetVal  ?? "-", null],
-    ["Hate",     hateVal?.label    ?? hateVal    ?? "-", hateVal?.score],
-    ["Emotion",  emoVal?.label     ?? emoVal     ?? "-", null],
+  // ---- Parse response (ikut server kau) ----
+  const polProb  = data?.political?.prob;
+  const hateProb = data?.hate?.prob;
+
+  const tgtPred  = data?.target?.pred;
+  const tgtProb  = (tgtPred != null && data?.target?.probs)
+    ? data.target.probs[tgtPred]
+    : null;
+
+  const emoPred  = data?.emotion?.pred;
+  const emoProb  = (emoPred != null && data?.emotion?.probs)
+    ? data.emotion.probs[emoPred]
+    : null;
+
+  const polLabel  = (polProb != null)  ? (polProb >= 0.5 ? "political" : "non-political") : "-";
+  const hateLabel = (hateProb != null) ? (hateProb >= 0.5 ? "hate" : "non-hate") : "-";
+  const tgtLabel  = (tgtPred != null)  ? (TARGET_LABELS[tgtPred] ?? ("id:"+tgtPred)) : "-";
+  const emoLabel  = (emoPred != null)  ? (EMO_LABELS[emoPred] ?? ("id:"+emoPred)) : "-";
+
+  const cards = [
+    ["Political", polLabel,  polProb  != null ? pct(polProb)  : null],
+    ["Target",    tgtLabel,  tgtProb  != null ? pct(tgtProb)  : null],
+    ["Hate",      hateLabel, hateProb != null ? pct(hateProb) : null],
+    ["Emotion",   emoLabel,  emoProb  != null ? pct(emoProb)  : null],
   ];
 
   document.getElementById("results").innerHTML = cards.map(
-    ([t,v,s])=>`
+    ([t,v,p])=>`
     <div class="card">
       <h3>${t}</h3>
-      <div class="value">${v ?? "-"}</div>
+      <div class="value">${v}</div>
       <span class="badge ${badgeClass(v)}">
-        ${s!=null ? (s*100).toFixed(2)+"%" : "predicted"}
+        ${p ?? "predicted"}
       </span>
     </div>`
   ).join("");
